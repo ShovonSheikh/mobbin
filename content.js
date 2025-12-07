@@ -1,8 +1,9 @@
 let isScanning = false;
 let shouldStop = false;
 let foundScreens = new Set();
+let networkCapturedCount = 0;
 
-// Listen for messages from popup
+// Listen for messages from popup and background
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'getAppInfo') {
     sendResponse(getAppInfo());
@@ -12,6 +13,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } else if (message.action === 'stopScan') {
     shouldStop = true;
     sendResponse({ success: true });
+  } else if (message.action === 'networkCaptureProgress') {
+    networkCapturedCount = message.count;
   }
   return true;
 });
@@ -45,14 +48,19 @@ async function startScanning() {
   isScanning = true;
   shouldStop = false;
   foundScreens.clear();
+  networkCapturedCount = 0;
   
   try {
     const { appName, appIcon } = getAppInfo();
     
-    // Scroll through the page to load all images
+    // Phase 1: Start network interception
+    chrome.runtime.sendMessage({ action: 'startInterception' });
+    
+    // Phase 2: Scroll through page with enhanced detection
     await scrollAndCollect();
     
     if (shouldStop) {
+      chrome.runtime.sendMessage({ action: 'stopInterception' });
       chrome.runtime.sendMessage({ 
         action: 'scanComplete', 
         count: foundScreens.size 
@@ -61,13 +69,23 @@ async function startScanning() {
       return;
     }
     
-    // Extract screen URLs
-    const screenUrls = Array.from(foundScreens);
+    // Phase 3: Get all URLs from network interception
+    const response = await chrome.runtime.sendMessage({ action: 'stopInterception' });
+    const networkUrls = response.urls || [];
     
-    // Convert images to base64 and save
-    const savedScreens = await downloadImages(screenUrls);
+    // Combine network captured + DOM scraped URLs
+    networkUrls.forEach(url => foundScreens.add(url));
     
-    // Save to storage
+    const allUrls = Array.from(foundScreens);
+    
+    console.log('Total unique URLs found:', allUrls.length);
+    console.log('Network captured:', networkUrls.length);
+    console.log('DOM scraped:', foundScreens.size - networkUrls.length);
+    
+    // Phase 4: Download high-resolution versions
+    const savedScreens = await downloadImages(allUrls);
+    
+    // Phase 5: Save to storage
     await saveToStorage(appName, appIcon, savedScreens);
     
     chrome.runtime.sendMessage({ 
@@ -87,92 +105,185 @@ async function startScanning() {
 }
 
 async function scrollAndCollect() {
-  const scrollDelay = 1000;
-  const maxScrolls = 100;
+  const scrollDelay = 2500; // Slower scroll for better loading
+  const maxScrolls = 150;
   let scrollCount = 0;
   let lastHeight = 0;
+  let stableCount = 0;
+  
+  // Set up mutation observer to catch image src changes
+  const observer = setupMutationObserver();
   
   while (scrollCount < maxScrolls && !shouldStop) {
     // Collect images from current viewport
     collectScreensFromPage();
     
     // Scroll down
-    window.scrollBy(0, window.innerHeight * 0.8);
+    window.scrollBy(0, window.innerHeight * 0.7);
     
-    // Wait for images to load
+    // Wait for images to load and upgrade from w=15 to higher res
     await new Promise(resolve => setTimeout(resolve, scrollDelay));
     
     // Check if we've reached the bottom
     const currentHeight = document.documentElement.scrollHeight;
     if (currentHeight === lastHeight) {
-      break;
+      stableCount++;
+      // If height hasn't changed for 3 iterations, we're at the bottom
+      if (stableCount >= 3) {
+        break;
+      }
+    } else {
+      stableCount = 0;
     }
     
     lastHeight = currentHeight;
     scrollCount++;
     
-    // Send progress update
+    // Send progress update (combine network + DOM captures)
+    const totalFound = Math.max(foundScreens.size, networkCapturedCount);
     chrome.runtime.sendMessage({ 
       action: 'scanProgress', 
-      count: foundScreens.size 
+      count: totalFound 
     });
   }
+  
+  // Disconnect observer
+  observer.disconnect();
   
   // Scroll back to top
   window.scrollTo(0, 0);
 }
 
+function setupMutationObserver() {
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.type === 'attributes' && mutation.attributeName === 'src') {
+        const img = mutation.target;
+        if (img.src && img.src.includes('app_screens')) {
+          const baseUrl = extractBaseUrl(img.src);
+          if (baseUrl) {
+            foundScreens.add(baseUrl);
+          }
+        }
+      }
+    });
+  });
+  
+  // Observe the entire document for image changes
+  observer.observe(document.body, {
+    attributes: true,
+    attributeFilter: ['src'],
+    subtree: true
+  });
+  
+  return observer;
+}
+
 function collectScreensFromPage() {
-  // Look for screen images with specific pattern
+  // Look for screen images with specific patterns
   const images = document.querySelectorAll('img[src*="app_screens"], img[alt*="screen"]');
   
   images.forEach(img => {
-    let src = img.src;
-    
-    // Extract the base URL without query parameters
-    // Format: https://bytescale.mobbin.com/FW25bBB/image/mobbin.com/prod/content/app_screens/UUID.png
-    const match = src.match(/(https:\/\/bytescale\.mobbin\.com\/[^?]+\.png)/);
-    
-    if (match) {
-      const baseUrl = match[1];
-      
-      // Only add if it's a legitimate screen (reasonable size)
-      if (img.naturalWidth > 200 && img.naturalHeight > 200) {
-        foundScreens.add(baseUrl);
-      }
+    const baseUrl = extractBaseUrl(img.src);
+    if (baseUrl && isValidScreenshot(img)) {
+      foundScreens.add(baseUrl);
     }
   });
 }
 
+function extractBaseUrl(url) {
+  if (!url) return null;
+  
+  // Extract the base URL without query parameters
+  // Format: https://bytescale.mobbin.com/FW25bBB/image/mobbin.com/prod/content/app_screens/UUID.png
+  const match = url.match(/(https:\/\/bytescale\.mobbin\.com\/[^?]+\.(png|jpg|jpeg|webp))/i);
+  
+  return match ? match[1] : null;
+}
+
+function isValidScreenshot(img) {
+  // Only consider images that are reasonably sized
+  // Ignore tiny icons and thumbnails
+  return img.naturalWidth > 100 && img.naturalHeight > 100;
+}
+
 async function downloadImages(urls) {
   const images = [];
+  const batchSize = 5; // Download 5 at a time to avoid overwhelming
   
-  for (const url of urls) {
+  for (let i = 0; i < urls.length; i += batchSize) {
     if (shouldStop) break;
     
-    try {
-      // Request high-resolution version
-      const highResUrl = `${url}?w=1200&q=95`;
-      const base64 = await fetchImageAsBase64(highResUrl);
-      
-      if (base64) {
-        images.push({
-          url: url,
-          data: base64,
-          timestamp: Date.now()
-        });
+    const batch = urls.slice(i, i + batchSize);
+    const batchPromises = batch.map(url => downloadSingleImage(url));
+    
+    const results = await Promise.allSettled(batchPromises);
+    
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled' && result.value) {
+        images.push(result.value);
+      } else {
+        console.error('Failed to download:', batch[index], result.reason);
       }
-    } catch (error) {
-      console.error('Failed to download image:', url, error);
-    }
+    });
+    
+    // Update progress
+    chrome.runtime.sendMessage({ 
+      action: 'scanProgress', 
+      count: images.length 
+    });
   }
   
   return images;
 }
 
+async function downloadSingleImage(baseUrl) {
+  try {
+    // Try to get maximum resolution
+    // First, try without watermark by requesting the raw file
+    const highResUrls = [
+      `${baseUrl}`, // Original without params
+      `${baseUrl}?w=2400&q=100`, // Very high res
+      `${baseUrl}?w=1600&q=95`,  // High res fallback
+      `${baseUrl}?w=1200&q=90`   // Medium res fallback
+    ];
+    
+    // Try each URL until one works
+    for (const url of highResUrls) {
+      try {
+        const base64 = await fetchImageAsBase64(url);
+        if (base64) {
+          return {
+            url: baseUrl,
+            data: base64,
+            timestamp: Date.now()
+          };
+        }
+      } catch (e) {
+        // Try next URL
+        continue;
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Failed to download image:', baseUrl, error);
+    return null;
+  }
+}
+
 async function fetchImageAsBase64(url) {
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      method: 'GET',
+      mode: 'cors',
+      credentials: 'omit'
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
     const blob = await response.blob();
     
     return new Promise((resolve, reject) => {
@@ -182,8 +293,7 @@ async function fetchImageAsBase64(url) {
       reader.readAsDataURL(blob);
     });
   } catch (error) {
-    console.error('Error fetching image:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -217,4 +327,4 @@ async function saveToStorage(appName, appIcon, images) {
       });
     });
   });
-} 
+}

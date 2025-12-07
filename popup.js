@@ -68,13 +68,18 @@ async function startScan() {
 
 function handleMessage(message, sender, sendResponse) {
   if (message.action === 'scanProgress') {
+    const count = message.count;
     document.getElementById('progressText').textContent = 
-      `Found ${message.count} screenshot${message.count !== 1 ? 's' : ''}...`;
+      `Found ${count} screenshot${count !== 1 ? 's' : ''}...`;
+    document.getElementById('progressDetails').textContent = 
+      'Network interception + DOM scraping active';
   } else if (message.action === 'scanComplete') {
     setScanning(false);
     chrome.storage.local.set({ isScanning: false });
     document.getElementById('progressText').textContent = 
       `Complete! Saved ${message.count} screenshot${message.count !== 1 ? 's' : ''}`;
+    document.getElementById('progressDetails').textContent = 
+      'Maximum resolution downloaded';
     loadTotalCount();
     
     setTimeout(() => {
