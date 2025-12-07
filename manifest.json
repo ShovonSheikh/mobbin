@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Mobbin Image Extractor",
+  "version": "1.0",
+  "description": "Extract high-quality images from Mobbin's virtualized content",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.mobbin.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "dashboard.html",
+        "app-detail.html",
+        "dashboard.css",
+        "dashboard.js",
+        "app-detail.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

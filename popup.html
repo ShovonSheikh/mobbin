@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h1>🖼️ Mobbin Image Extractor</h1>
+  
+  <div class="options">
+    <div class="option">
+      <label for="scrollDelay">Scroll delay (ms):</label>
+      <input type="number" id="scrollDelay" value="800" min="100" max="5000" step="100">
+    </div>
+    <div class="option">
+      <label for="scrollAmount">Scroll amount (px):</label>
+      <input type="number" id="scrollAmount" value="800" min="100" max="2000" step="100">
+    </div>
+  </div>
+  
+  <div class="controls">
+    <button id="startBtn">▶ Start</button>
+    <button id="stopBtn" disabled>⏸ Stop</button>
+  </div>
+  
+  <div class="status" id="status">Ready to scan</div>
+  
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-label">Found</div>
+      <div class="stat-value" id="foundCount">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Unique</div>
+      <div class="stat-value" id="uniqueCount">0</div>
+    </div>
+  </div>
+  
+  <div class="progress">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+  
+  <button id="viewDashboardBtn" class="btn-dashboard">📊 View Dashboard</button>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

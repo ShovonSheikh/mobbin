@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>App Screenshots</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Back Button & Header -->
+    <header class="detail-header">
+      <button id="backBtn" class="back-btn">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Back
+      </button>
+    </header>
+
+    <!-- App Info -->
+    <div class="app-info">
+      <img id="appLogo" class="app-logo-large" src="" alt="App logo">
+      <div class="app-meta">
+        <h1 id="appName" class="app-name-large">Loading...</h1>
+        <p id="screenCount" class="screen-count">Total 0 screens are saved</p>
+      </div>
+    </div>
+
+    <!-- Screenshots Grid -->
+    <div id="screenshotsGrid" class="screenshots-grid">
+      <!-- Screenshots will be dynamically inserted here -->
+    </div>
+  </div>
+
+  <!-- Image Preview Modal -->
+  <div id="imageModal" class="modal">
+    <button class="modal-close" id="closeModal">×</button>
+    <div class="modal-content">
+      <img id="modalImage" src="" alt="Screenshot preview">
+      <div class="modal-actions">
+        <button id="downloadImageBtn" class="btn-download">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M10 14L5 9l1.41-1.41L9 10.17V2h2v8.17l2.59-2.58L15 9l-5 5zm-7 4h14v2H3v-2z" fill="currentColor"/>
+          </svg>
+          Download
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app-detail.js"></script>
+</body>
+</html>
