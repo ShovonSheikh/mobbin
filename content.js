@@ -61,11 +61,6 @@ function extractAppInfo() {
         .replace(/\b\w/g, (l) => l.toUpperCase());
     } else {
       appName = document.title.split("-")[0].trim() || "Unknown App";
-    appName = tempDiv.textContent.trim();
-    // Clean up the app name, removing the subtitle if present
-    const subtitleSpan = tempDiv.querySelector("span.hidden.min-720:inline");
-    if (subtitleSpan) {
-      appName = appName.replace(subtitleSpan.textContent, "").trim();
     }
   }
 
