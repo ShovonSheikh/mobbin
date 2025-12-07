@@ -3,33 +3,470 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mobbin Dashboard - Your Apps</title>
-  <link rel="stylesheet" href="dashboard.css">
+  <title>Mobbin Extractor Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+      background: #000;
+      color: #fff;
+      min-height: 100vh;
+    }
+
+    .header {
+      position: sticky;
+      top: 0;
+      background: #000;
+      border-bottom: 1px solid #1a1a1a;
+      padding: 24px 40px;
+      z-index: 100;
+      backdrop-filter: blur(10px);
+    }
+
+    .header-content {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header-left h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      letter-spacing: -0.02em;
+    }
+
+    .header-left p {
+      font-size: 14px;
+      color: #666;
+    }
+
+    .stats {
+      display: flex;
+      gap: 32px;
+    }
+
+    .stat-item {
+      text-align: right;
+    }
+
+    .stat-number {
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .stat-label {
+      font-size: 13px;
+      color: #666;
+      margin-top: 2px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 40px;
+    }
+
+    .back-button {
+      position: fixed;
+      bottom: 32px;
+      right: 32px;
+      background: #fff;
+      color: #000;
+      border: none;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(255, 255, 255, 0.2);
+      transition: all 0.2s ease;
+      z-index: 90;
+    }
+
+    .back-button:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 24px rgba(255, 255, 255, 0.3);
+    }
+
+    .back-button.hidden {
+      display: none;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 120px 40px;
+    }
+
+    .empty-state-icon {
+      font-size: 64px;
+      margin-bottom: 24px;
+      opacity: 0.3;
+    }
+
+    .empty-state h2 {
+      font-size: 24px;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+
+    .empty-state p {
+      color: #666;
+      font-size: 15px;
+      line-height: 1.6;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+
+    /* Apps Grid View */
+    .apps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 24px;
+    }
+
+    .app-card {
+      background: #0a0a0a;
+      border: 1px solid #1a1a1a;
+      border-radius: 12px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .app-card:hover {
+      border-color: #333;
+      transform: translateY(-2px);
+    }
+
+    .app-card-preview {
+      height: 200px;
+      background: #050505;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+      border-bottom: 1px solid #1a1a1a;
+    }
+
+    .app-card-preview img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    .screen-count-badge {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(10px);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      border: 1px solid #333;
+    }
+
+    .app-card-info {
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .app-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      border: 1px solid #1a1a1a;
+      flex-shrink: 0;
+      overflow: hidden;
+      background: #0a0a0a;
+    }
+
+    .app-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .app-details h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .app-date {
+      font-size: 13px;
+      color: #666;
+    }
+
+    /* App Detail View */
+    .detail-view {
+      display: none;
+    }
+
+    .detail-view.active {
+      display: block;
+    }
+
+    .detail-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 40px;
+      padding-bottom: 32px;
+      border-bottom: 1px solid #1a1a1a;
+    }
+
+    .detail-icon {
+      width: 80px;
+      height: 80px;
+      border-radius: 16px;
+      border: 1px solid #1a1a1a;
+      overflow: hidden;
+      background: #0a0a0a;
+    }
+
+    .detail-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .detail-info h2 {
+      font-size: 28px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+
+    .detail-meta {
+      display: flex;
+      gap: 24px;
+      font-size: 14px;
+      color: #666;
+    }
+
+    .screens-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 24px;
+    }
+
+    .screen-item {
+      position: relative;
+      background: #0a0a0a;
+      border: 1px solid #1a1a1a;
+      border-radius: 12px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .screen-item:hover {
+      border-color: #333;
+      transform: scale(1.02);
+    }
+
+    .screen-item img {
+      width: 100%;
+      height: 400px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .screen-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent 50%);
+      display: flex;
+      align-items: flex-end;
+      padding: 16px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .screen-item:hover .screen-overlay {
+      opacity: 1;
+    }
+
+    .download-btn {
+      background: #fff;
+      color: #000;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .download-btn:hover {
+      background: #f0f0f0;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      position: fixed;
+      top: 0;
+      right: -100%;
+      width: 60vw;
+      max-width: 800px;
+      height: 100vh;
+      background: #000;
+      border-left: 1px solid #1a1a1a;
+      z-index: 200;
+      transition: right 0.3s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar.active {
+      right: 0;
+    }
+
+    .sidebar-header {
+      padding: 24px;
+      border-bottom: 1px solid #1a1a1a;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .sidebar-header h3 {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .close-sidebar {
+      background: #0a0a0a;
+      border: 1px solid #1a1a1a;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 20px;
+      color: #fff;
+      transition: all 0.2s ease;
+    }
+
+    .close-sidebar:hover {
+      background: #1a1a1a;
+      border-color: #333;
+    }
+
+    .sidebar-content {
+      flex: 1;
+      overflow: auto;
+      padding: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .sidebar-image {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: 12px;
+      border: 1px solid #1a1a1a;
+    }
+
+    .overlay-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 150;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .overlay-backdrop.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* Icons */
+    .icon {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      stroke-width: 2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <!-- Header -->
-    <header class="header">
-      <h1 class="title">Your Apps</h1>
-      <div class="search-box">
-        <input type="text" id="searchInput" placeholder="Search apps..." />
-        <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
-          <path d="M9 17A8 8 0 1 0 9 1a8 8 0 0 0 0 16zM18 18l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+  <div class="header">
+    <div class="header-content">
+      <div class="header-left">
+        <h1>Mobbin Extractor</h1>
+        <p>Your collected app designs</p>
       </div>
-    </header>
+      <div class="stats">
+        <div class="stat-item">
+          <div class="stat-number" id="totalApps">0</div>
+          <div class="stat-label">Apps</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number" id="totalScreenshots">0</div>
+          <div class="stat-label">Screenshots</div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-    <!-- Apps Grid -->
-    <div id="appsGrid" class="apps-grid">
-      <!-- Apps will be dynamically inserted here -->
+  <div class="container">
+    <div id="emptyState" class="empty-state">
+      <div class="empty-state-icon">📱</div>
+      <h2>No apps collected yet</h2>
+      <p>Visit any app on Mobbin.com and click the extension icon to start collecting high-quality screenshots.</p>
     </div>
 
-    <!-- Empty State -->
-    <div id="emptyState" class="empty-state">
-      <div class="empty-icon">🖼️</div>
-      <h2>No apps saved yet</h2>
-      <p>Start scanning Mobbin pages to collect app screenshots</p>
-      <button onclick="window.close()" class="btn-primary">Go Back to Scanner</button>
+    <div id="appsView" class="apps-grid" style="display: none;"></div>
+
+    <div id="detailView" class="detail-view"></div>
+  </div>
+
+  <button class="back-button hidden" id="backButton">
+    <svg class="icon" viewBox="0 0 24 24">
+      <path d="M19 12H5M12 19l-7-7 7-7"/>
+    </svg>
+  </button>
+
+  <div class="overlay-backdrop" id="overlayBackdrop"></div>
+
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h3>Full Resolution</h3>
+      <button class="close-sidebar" id="closeSidebar">×</button>
+    </div>
+    <div class="sidebar-content">
+      <img id="sidebarImage" class="sidebar-image" src="" alt="Full resolution screen">
     </div>
   </div>
 

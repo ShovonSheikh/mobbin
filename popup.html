@@ -1,47 +1,222 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <link rel="stylesheet" href="styles.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mobbin Extractor</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 360px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+      background: #000;
+      color: #fff;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .container {
+      padding: 24px;
+    }
+
+    .header {
+      margin-bottom: 24px;
+      border-bottom: 1px solid #222;
+      padding-bottom: 20px;
+    }
+
+    .header h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      letter-spacing: -0.01em;
+    }
+
+    .header p {
+      font-size: 13px;
+      color: #888;
+    }
+
+    .status {
+      background: #111;
+      border: 1px solid #222;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .status-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .status-label {
+      font-size: 13px;
+      color: #888;
+    }
+
+    .status-value {
+      font-weight: 500;
+      font-size: 13px;
+      color: #fff;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid #333;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 10px;
+      background: #000;
+      color: #fff;
+      font-family: inherit;
+    }
+
+    .btn:hover {
+      background: #111;
+      border-color: #444;
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: #fff;
+      color: #000;
+      border-color: #fff;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #f0f0f0;
+      border-color: #f0f0f0;
+    }
+
+    .btn-danger {
+      border-color: #ff4444;
+      color: #ff4444;
+    }
+
+    .btn-danger:hover {
+      background: #ff4444;
+      color: #fff;
+    }
+
+    .progress {
+      margin-top: 16px;
+      padding: 14px;
+      background: #111;
+      border: 1px solid #222;
+      border-radius: 6px;
+      text-align: center;
+      font-size: 13px;
+      color: #888;
+      display: none;
+    }
+
+    .progress.active {
+      display: block;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #333;
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .error {
+      background: #1a0000;
+      border: 1px solid #440000;
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: #ff6666;
+      display: none;
+    }
+
+    .error.show {
+      display: block;
+    }
+
+    .footer {
+      text-align: center;
+      font-size: 11px;
+      color: #555;
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid #1a1a1a;
+    }
+  </style>
 </head>
 <body>
-  <h1>🖼️ Mobbin Image Extractor</h1>
-  
-  <div class="options">
-    <div class="option">
-      <label for="scrollDelay">Scroll delay (ms):</label>
-      <input type="number" id="scrollDelay" value="800" min="100" max="5000" step="100">
+  <div class="container">
+    <div class="header">
+      <h1>Mobbin Extractor</h1>
+      <p>High-quality screenshot collection</p>
     </div>
-    <div class="option">
-      <label for="scrollAmount">Scroll amount (px):</label>
-      <input type="number" id="scrollAmount" value="800" min="100" max="2000" step="100">
+
+    <div class="status">
+      <div class="status-item">
+        <span class="status-label">App Detected</span>
+        <span class="status-value" id="appName">—</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Total Saved</span>
+        <span class="status-value" id="totalCount">0 screenshots</span>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="startBtn">
+      Start Scan
+    </button>
+
+    <button class="btn btn-danger" id="stopBtn" style="display: none;">
+      Stop Scanning
+    </button>
+
+    <button class="btn" id="dashboardBtn">
+      View Dashboard
+    </button>
+
+    <div class="progress" id="progress">
+      <span class="spinner"></span>
+      <span id="progressText">Scanning for screenshots...</span>
+    </div>
+
+    <div class="error" id="error"></div>
+
+    <div class="footer">
+      All data stored locally in your browser
     </div>
   </div>
-  
-  <div class="controls">
-    <button id="startBtn">▶ Start</button>
-    <button id="stopBtn" disabled>⏸ Stop</button>
-  </div>
-  
-  <div class="status" id="status">Ready to scan</div>
-  
-  <div class="stats">
-    <div class="stat">
-      <div class="stat-label">Found</div>
-      <div class="stat-value" id="foundCount">0</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Unique</div>
-      <div class="stat-value" id="uniqueCount">0</div>
-    </div>
-  </div>
-  
-  <div class="progress">
-    <div class="progress-bar" id="progressBar"></div>
-  </div>
-  
-  <button id="viewDashboardBtn" class="btn-dashboard">📊 View Dashboard</button>
-  
+
   <script src="popup.js"></script>
 </body>
 </html>
