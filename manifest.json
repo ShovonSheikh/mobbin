@@ -1,13 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Mobbin Extractor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Save high-quality app screenshots from Mobbin with one click",
   "permissions": [
     "activeTab",
     "storage",
-    "scripting",
-    "webRequest"
+    "scripting"
   ],
   "host_permissions": [
     "https://mobbin.com/*",

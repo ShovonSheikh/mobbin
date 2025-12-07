@@ -81,21 +81,28 @@ function createAppCard(app) {
   const card = document.createElement('div');
   card.className = 'app-card';
   
-  const previewImage = app.screens[0]?.data || '';
+  // Use first screenshot URL with high quality params
+  const previewUrl = app.screens[0]?.url 
+    ? `${app.screens[0].url}?w=800&q=90` 
+    : '';
+  
   const date = new Date(app.updatedAt || app.createdAt).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric'
   });
   
+  // App icon already has quality params from content.js
+  const iconUrl = app.icon || '';
+  
   card.innerHTML = `
     <div class="app-card-preview">
-      ${previewImage ? `<img src="${previewImage}" alt="${app.name}">` : ''}
+      ${previewUrl ? `<img src="${previewUrl}" alt="${app.name}" loading="lazy">` : ''}
       <div class="screen-count-badge">${app.screens.length} screens</div>
     </div>
     <div class="app-card-info">
       <div class="app-icon">
-        ${app.icon ? `<img src="${app.icon}" alt="${app.name}">` : ''}
+        ${iconUrl ? `<img src="${iconUrl}" alt="${app.name}" loading="lazy">` : ''}
       </div>
       <div class="app-details">
         <h3>${app.name}</h3>
@@ -134,7 +141,7 @@ function showAppDetail(appId) {
   detailView.innerHTML = `
     <div class="detail-header">
       <div class="detail-icon">
-        ${app.icon ? `<img src="${app.icon}" alt="${app.name}">` : ''}
+        ${app.icon ? `<img src="${app.icon}" alt="${app.name}" loading="lazy">` : ''}
       </div>
       <div class="detail-info">
         <h2>${app.name}</h2>
@@ -165,8 +172,12 @@ function createScreenItem(screen, index, appName) {
   const item = document.createElement('div');
   item.className = 'screen-item';
   
+  // Use medium quality for thumbnails, high quality for modal/download
+  const thumbnailUrl = `${screen.url}?w=600&q=85`;
+  const fullUrl = `${screen.url}?w=1600&q=95`;
+  
   item.innerHTML = `
-    <img src="${screen.data}" alt="Screenshot ${index + 1}">
+    <img src="${thumbnailUrl}" alt="Screenshot ${index + 1}" loading="lazy">
     <div class="screen-overlay">
       <button class="download-btn">
         <svg class="icon" viewBox="0 0 24 24">
@@ -182,13 +193,13 @@ function createScreenItem(screen, index, appName) {
   // Click on image to view in sidebar
   item.querySelector('img').addEventListener('click', (e) => {
     e.stopPropagation();
-    openSidebar(screen.data);
+    openSidebar(fullUrl);
   });
   
   // Click on download button
   item.querySelector('.download-btn').addEventListener('click', (e) => {
     e.stopPropagation();
-    downloadScreen(screen.data, appName, index);
+    downloadScreen(fullUrl, appName, index);
   });
   
   return item;
@@ -207,8 +218,8 @@ function showAppsView() {
   }
 }
 
-function openSidebar(imageData) {
-  document.getElementById('sidebarImage').src = imageData;
+function openSidebar(imageUrl) {
+  document.getElementById('sidebarImage').src = imageUrl;
   document.getElementById('sidebar').classList.add('active');
   document.getElementById('overlayBackdrop').classList.add('active');
   document.body.style.overflow = 'hidden';
@@ -220,11 +231,30 @@ function closeSidebar() {
   document.body.style.overflow = '';
 }
 
-function downloadScreen(data, appName, index) {
-  const link = document.createElement('a');
-  link.href = data;
-  link.download = `${appName.replace(/\s+/g, '_')}_screen_${index + 1}.png`;
-  link.click();
+async function downloadScreen(url, appName, index) {
+  try {
+    // Show a loading indicator (optional)
+    console.log('Downloading:', url);
+    
+    // Fetch the image
+    const response = await fetch(url);
+    const blob = await response.blob();
+    
+    // Create download link
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = `${appName.replace(/\s+/g, '_')}_screen_${index + 1}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Clean up
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+  } catch (error) {
+    console.error('Download failed:', error);
+    alert('Failed to download image. Please try again.');
+  }
 }
 
 // Keyboard shortcuts

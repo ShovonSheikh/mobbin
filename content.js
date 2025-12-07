@@ -1,20 +1,24 @@
 let isScanning = false;
 let shouldStop = false;
 let foundScreens = new Set();
-let networkCapturedCount = 0;
+let originalZoom = 1;
 
-// Listen for messages from popup and background
+console.log('🚀 Mobbin Extractor content script loaded');
+
+// Listen for messages from popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('📨 Received message:', message.action);
+  
   if (message.action === 'getAppInfo') {
-    sendResponse(getAppInfo());
+    const info = getAppInfo();
+    console.log('📱 Returning app info:', info);
+    sendResponse(info);
   } else if (message.action === 'startScan') {
     startScanning();
     sendResponse({ success: true });
   } else if (message.action === 'stopScan') {
     shouldStop = true;
     sendResponse({ success: true });
-  } else if (message.action === 'networkCaptureProgress') {
-    networkCapturedCount = message.count;
   }
   return true;
 });
@@ -25,279 +29,291 @@ function getAppInfo() {
   let appName = 'Unknown App';
   
   if (h1Element) {
-    // Get just the app name, not the description
     const textContent = h1Element.textContent;
-    const namePart = textContent.split('—')[0].trim();
+    // Split by em dash, long dash, or regular dash
+    const parts = textContent.split(/—|–|-/);
+    const namePart = parts[0].trim();
     appName = namePart || textContent.trim();
   }
   
-  // Extract app icon
-  const iconElement = document.querySelector('img[alt*="logo"], img[src*="app_logos"]');
-  let appIcon = null;
-  
-  if (iconElement) {
-    appIcon = iconElement.src;
+  // Also try to get from page title
+  if (appName === 'Unknown App') {
+    const title = document.title;
+    if (title && !title.includes('Mobbin')) {
+      appName = title.split('—')[0].split('–')[0].split('-')[0].trim();
+    }
   }
   
+  // Extract app icon - look for a rounded square icon near the top
+  // Try multiple selectors in order of specificity
+  let appIcon = null;
+  
+  // Method 1: Look for image with specific size (app icons are usually 48x48 or larger)
+  const topImages = document.querySelectorAll('img[src*="app_logos"]');
+  for (const img of topImages) {
+    // Check if it's in the header area (top 400px of page)
+    const rect = img.getBoundingClientRect();
+    if (rect.top < 400 && img.naturalWidth >= 40) {
+      const iconUrl = img.src.split('?')[0];
+      appIcon = `${iconUrl}?w=200&q=95`;
+      console.log('✅ Found app icon (method 1):', appIcon);
+      break;
+    }
+  }
+  
+  // Method 2: If not found, look for any app_logos image
+  if (!appIcon) {
+    const iconElement = document.querySelector('img[src*="app_logos"]');
+    if (iconElement) {
+      const iconUrl = iconElement.src.split('?')[0];
+      appIcon = `${iconUrl}?w=200&q=95`;
+      console.log('✅ Found app icon (method 2):', appIcon);
+    }
+  }
+  
+  // Method 3: Try to find the first large square-ish image at the top
+  if (!appIcon) {
+    const allImages = document.querySelectorAll('img');
+    for (const img of allImages) {
+      const rect = img.getBoundingClientRect();
+      const aspectRatio = img.naturalWidth / img.naturalHeight;
+      
+      // Look for square-ish images (0.8 to 1.2 ratio) in the header
+      if (rect.top < 300 && 
+          img.naturalWidth >= 40 && 
+          aspectRatio > 0.8 && 
+          aspectRatio < 1.2 &&
+          img.src.includes('mobbin')) {
+        const iconUrl = img.src.split('?')[0];
+        appIcon = `${iconUrl}?w=200&q=95`;
+        console.log('✅ Found app icon (method 3):', appIcon);
+        break;
+      }
+    }
+  }
+  
+  console.log('✅ Extracted app info:', { appName, appIcon });
   return { appName, appIcon };
 }
 
 async function startScanning() {
-  if (isScanning) return;
+  if (isScanning) {
+    console.log('⚠️ Already scanning');
+    return;
+  }
   
   isScanning = true;
   shouldStop = false;
   foundScreens.clear();
-  networkCapturedCount = 0;
+  
+  console.log('🔍 Starting scan...');
   
   try {
     const { appName, appIcon } = getAppInfo();
+    console.log('📱 Scanning app:', appName);
     
-    // Phase 1: Start network interception
-    chrome.runtime.sendMessage({ action: 'startInterception' });
+    // Save original zoom level and scroll position
+    originalZoom = document.body.style.zoom || '1';
+    const originalScroll = window.scrollY;
     
-    // Phase 2: Scroll through page with enhanced detection
-    await scrollAndCollect();
+    // Step 1: Zoom out to 25%
+    console.log('🔍 Zooming out to 25%...');
+    chrome.runtime.sendMessage({ 
+      action: 'scanStatus',
+      status: '🔍 Zooming out to 25%...'
+    });
+    
+    document.body.style.zoom = '0.25';
+    
+    // Wait a moment for zoom to apply
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Step 2: Quick scroll to bottom AFTER zooming
+    console.log('📜 Scrolling to load all images...');
+    chrome.runtime.sendMessage({ 
+      action: 'scanStatus',
+      status: '📜 Scrolling to load all images...'
+    });
+    
+    await quickScrollToBottom();
+    
+    // Scroll back to top
+    window.scrollTo(0, 0);
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Step 3: Wait for all images to load
+    console.log('⏳ Waiting for images to load...');
+    chrome.runtime.sendMessage({ 
+      action: 'scanStatus',
+      status: '⏳ Loading images...'
+    });
+    
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    // Step 4: Collect all screenshot URLs
+    await collectAllScreenshotsAtOnce();
+    
+    // Restore original zoom and scroll
+    document.body.style.zoom = originalZoom;
+    window.scrollTo(0, originalScroll);
+    console.log('✅ Zoom and scroll restored');
     
     if (shouldStop) {
-      chrome.runtime.sendMessage({ action: 'stopInterception' });
+      console.log('⏹️ Scan stopped by user');
       chrome.runtime.sendMessage({ 
         action: 'scanComplete', 
-        count: foundScreens.size 
+        count: foundScreens.size,
+        newCount: foundScreens.size
       });
       isScanning = false;
       return;
     }
     
-    // Phase 3: Get all URLs from network interception
-    const response = await chrome.runtime.sendMessage({ action: 'stopInterception' });
-    const networkUrls = response.urls || [];
-    
-    // Combine network captured + DOM scraped URLs
-    networkUrls.forEach(url => foundScreens.add(url));
-    
     const allUrls = Array.from(foundScreens);
+    console.log('📸 Total URLs collected:', allUrls.length);
     
-    console.log('Total unique URLs found:', allUrls.length);
-    console.log('Network captured:', networkUrls.length);
-    console.log('DOM scraped:', foundScreens.size - networkUrls.length);
+    // Extract clean base URLs (without query parameters)
+    const cleanUrls = allUrls
+      .map(url => extractCleanUrl(url))
+      .filter(Boolean);
     
-    // Phase 4: Download high-resolution versions
-    const savedScreens = await downloadImages(allUrls);
+    // Set automatically removes duplicates
+    const uniqueUrls = [...new Set(cleanUrls)];
     
-    // Phase 5: Save to storage
-    await saveToStorage(appName, appIcon, savedScreens);
+    console.log('✅ Unique clean URLs:', uniqueUrls.length);
+    console.log('🔍 Sample URLs:', uniqueUrls.slice(0, 3));
+    
+    // Save to storage
+    const savedInfo = await saveToStorage(appName, appIcon, uniqueUrls);
     
     chrome.runtime.sendMessage({ 
       action: 'scanComplete', 
-      count: savedScreens.length 
+      count: savedInfo.totalCount,
+      newCount: savedInfo.newCount
     });
     
   } catch (error) {
-    console.error('Scan error:', error);
+    console.error('❌ Scan error:', error);
     chrome.runtime.sendMessage({ 
       action: 'scanError', 
       error: error.message 
     });
+    
+    // Restore zoom on error
+    document.body.style.zoom = originalZoom;
   } finally {
     isScanning = false;
   }
 }
 
-async function scrollAndCollect() {
-  const scrollDelay = 2500; // Slower scroll for better loading
-  const maxScrolls = 150;
+async function quickScrollToBottom() {
+  const scrollDelay = 300; // Fast scroll
+  const maxScrolls = 50;
   let scrollCount = 0;
   let lastHeight = 0;
   let stableCount = 0;
   
-  // Set up mutation observer to catch image src changes
-  const observer = setupMutationObserver();
-  
-  while (scrollCount < maxScrolls && !shouldStop) {
-    // Collect images from current viewport
-    collectScreensFromPage();
+  while (scrollCount < maxScrolls) {
+    const currentHeight = document.documentElement.scrollHeight;
     
-    // Scroll down
-    window.scrollBy(0, window.innerHeight * 0.7);
+    // Scroll down quickly
+    window.scrollBy(0, window.innerHeight * 1.5);
+    scrollCount++;
     
-    // Wait for images to load and upgrade from w=15 to higher res
     await new Promise(resolve => setTimeout(resolve, scrollDelay));
     
-    // Check if we've reached the bottom
-    const currentHeight = document.documentElement.scrollHeight;
-    if (currentHeight === lastHeight) {
+    const newHeight = document.documentElement.scrollHeight;
+    
+    if (newHeight === currentHeight) {
       stableCount++;
-      // If height hasn't changed for 3 iterations, we're at the bottom
       if (stableCount >= 3) {
+        console.log('📍 Reached bottom');
         break;
       }
     } else {
       stableCount = 0;
+      lastHeight = newHeight;
     }
-    
-    lastHeight = currentHeight;
-    scrollCount++;
-    
-    // Send progress update (combine network + DOM captures)
-    const totalFound = Math.max(foundScreens.size, networkCapturedCount);
-    chrome.runtime.sendMessage({ 
-      action: 'scanProgress', 
-      count: totalFound 
-    });
   }
-  
-  // Disconnect observer
-  observer.disconnect();
-  
-  // Scroll back to top
-  window.scrollTo(0, 0);
 }
 
-function setupMutationObserver() {
-  const observer = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
-      if (mutation.type === 'attributes' && mutation.attributeName === 'src') {
-        const img = mutation.target;
-        if (img.src && img.src.includes('app_screens')) {
-          const baseUrl = extractBaseUrl(img.src);
-          if (baseUrl) {
-            foundScreens.add(baseUrl);
-          }
-        }
-      }
-    });
+async function collectAllScreenshotsAtOnce() {
+  console.log('📸 Collecting all screenshots from zoomed-out view...');
+  
+  chrome.runtime.sendMessage({ 
+    action: 'scanStatus',
+    status: '📸 Scanning all visible images...'
   });
   
-  // Observe the entire document for image changes
-  observer.observe(document.body, {
-    attributes: true,
-    attributeFilter: ['src'],
-    subtree: true
-  });
+  // Give extra time for all images to load in the grid
+  await new Promise(resolve => setTimeout(resolve, 2000));
   
-  return observer;
-}
-
-function collectScreensFromPage() {
-  // Look for screen images with specific patterns
-  const images = document.querySelectorAll('img[src*="app_screens"], img[alt*="screen"]');
+  // Find all screenshot images
+  const images = document.querySelectorAll('img[src*="app_screens"]');
   
-  images.forEach(img => {
-    const baseUrl = extractBaseUrl(img.src);
-    if (baseUrl && isValidScreenshot(img)) {
-      foundScreens.add(baseUrl);
-    }
-  });
-}
-
-function extractBaseUrl(url) {
-  if (!url) return null;
+  console.log(`📊 Found ${images.length} total images with app_screens`);
   
-  // Extract the base URL without query parameters
-  // Format: https://bytescale.mobbin.com/FW25bBB/image/mobbin.com/prod/content/app_screens/UUID.png
-  const match = url.match(/(https:\/\/bytescale\.mobbin\.com\/[^?]+\.(png|jpg|jpeg|webp))/i);
-  
-  return match ? match[1] : null;
-}
-
-function isValidScreenshot(img) {
-  // Only consider images that are reasonably sized
-  // Ignore tiny icons and thumbnails
-  return img.naturalWidth > 100 && img.naturalHeight > 100;
-}
-
-async function downloadImages(urls) {
-  const images = [];
-  const batchSize = 5; // Download 5 at a time to avoid overwhelming
-  
-  for (let i = 0; i < urls.length; i += batchSize) {
-    if (shouldStop) break;
-    
-    const batch = urls.slice(i, i + batchSize);
-    const batchPromises = batch.map(url => downloadSingleImage(url));
-    
-    const results = await Promise.allSettled(batchPromises);
-    
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled' && result.value) {
-        images.push(result.value);
-      } else {
-        console.error('Failed to download:', batch[index], result.reason);
-      }
-    });
-    
-    // Update progress
-    chrome.runtime.sendMessage({ 
-      action: 'scanProgress', 
-      count: images.length 
-    });
-  }
-  
-  return images;
-}
-
-async function downloadSingleImage(baseUrl) {
-  try {
-    // Try to get maximum resolution
-    // First, try without watermark by requesting the raw file
-    const highResUrls = [
-      `${baseUrl}`, // Original without params
-      `${baseUrl}?w=2400&q=100`, // Very high res
-      `${baseUrl}?w=1600&q=95`,  // High res fallback
-      `${baseUrl}?w=1200&q=90`   // Medium res fallback
-    ];
-    
-    // Try each URL until one works
-    for (const url of highResUrls) {
-      try {
-        const base64 = await fetchImageAsBase64(url);
-        if (base64) {
-          return {
-            url: baseUrl,
-            data: base64,
-            timestamp: Date.now()
-          };
-        }
-      } catch (e) {
-        // Try next URL
-        continue;
+  images.forEach((img, index) => {
+    if (img.src) {
+      const cleanUrl = extractCleanUrl(img.src);
+      if (cleanUrl) {
+        foundScreens.add(cleanUrl);
       }
     }
-    
-    return null;
-  } catch (error) {
-    console.error('Failed to download image:', baseUrl, error);
-    return null;
-  }
-}
-
-async function fetchImageAsBase64(url) {
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      mode: 'cors',
-      credentials: 'omit'
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+  });
+  
+  console.log(`✅ Collected ${foundScreens.size} unique screenshot URLs`);
+  
+  chrome.runtime.sendMessage({ 
+    action: 'scanProgress', 
+    count: foundScreens.size,
+    scrollInfo: `✅ Found ${foundScreens.size} screenshots`
+  });
+  
+  // Wait a bit more and do one final collection pass
+  console.log('🔄 Doing final collection pass...');
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  
+  const imagesSecondPass = document.querySelectorAll('img[src*="app_screens"]');
+  imagesSecondPass.forEach(img => {
+    if (img.src) {
+      const cleanUrl = extractCleanUrl(img.src);
+      if (cleanUrl) {
+        foundScreens.add(cleanUrl);
+      }
     }
-    
-    const blob = await response.blob();
-    
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  } catch (error) {
-    throw error;
-  }
+  });
+  
+  console.log(`🔄 Final count: ${foundScreens.size} unique screenshots`);
+  
+  chrome.runtime.sendMessage({ 
+    action: 'scanStatus',
+    status: `🔄 Final: ${foundScreens.size} screenshots found`
+  });
 }
 
-async function saveToStorage(appName, appIcon, images) {
+function extractCleanUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  
+  // Must contain app_screens to be a screenshot
+  if (!url.includes('app_screens')) return null;
+  
+  // Extract the UUID and extension from the URL
+  // Pattern: .../app_screens/UUID.extension?params...
+  const match = url.match(/app_screens\/([a-f0-9\-]+)\.(png|jpg|jpeg|webp)/i);
+  
+  if (match) {
+    const uuid = match[1];
+    const ext = match[2];
+    
+    // Return clean URL: base path + UUID + extension (no query params)
+    return `https://bytescale.mobbin.com/FW25bBB/image/mobbin.com/prod/content/app_screens/${uuid}.${ext}`;
+  }
+  
+  return null;
+}
+
+async function saveToStorage(appName, appIcon, urls) {
   return new Promise((resolve) => {
     chrome.storage.local.get(['apps'], (result) => {
       const apps = result.apps || {};
@@ -315,16 +331,36 @@ async function saveToStorage(appName, appIcon, images) {
         };
       }
       
-      // Add new screens, avoiding duplicates
+      // Get existing URLs to avoid duplicates
       const existingUrls = new Set(apps[appId].screens.map(screen => screen.url));
-      const newScreens = images.filter(img => !existingUrls.has(img.url));
+      const newUrls = urls.filter(url => !existingUrls.has(url));
+      
+      // Create screen objects with just URL and timestamp
+      const newScreens = newUrls.map(url => ({
+        url: url,
+        timestamp: Date.now()
+      }));
       
       apps[appId].screens.push(...newScreens);
       apps[appId].updatedAt = Date.now();
       
+      const totalCount = apps[appId].screens.length;
+      const newCount = newScreens.length;
+      
+      console.log(`💾 Saved ${newCount} new screenshots for "${appName}"`);
+      console.log(`📊 Total screenshots for this app: ${totalCount}`);
+      
+      chrome.runtime.sendMessage({ 
+        action: 'scanStatus',
+        status: `💾 Saved ${newCount} new (${totalCount} total)`
+      });
+      
       chrome.storage.local.set({ apps }, () => {
-        resolve();
+        resolve({ totalCount, newCount });
       });
     });
   });
 }
+
+// Notify that content script is ready
+console.log('✅ Content script ready and listening for messages');
